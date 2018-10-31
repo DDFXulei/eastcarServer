@@ -1,15 +1,16 @@
 import * as express from 'express';
 import {Server} from 'ws';
+import * as path from 'path';
 
 const app = express();
 
 function sortArr(arr: Array<any>, sortBy: any, sortMode: any) {
     let len = arr.length;
     //排序方法为冒泡排序
-    for (let i =1; i< len; ++i) {
-        for (let j=1; j< len-i; ++j) {
+    for (let i = 0; i< len-1; ++i) {
+        for (let j= 0; j< len-1-i; ++j) {
             //为true时，降序排序
-            if( sortMode == 'true'){
+            if( sortMode == 'false'){
                 //根据对象数组中对象的sortBy属性排序
                 if(arr[j][sortBy] > arr[j+1][sortBy]) {
                     let temp = arr[j];
@@ -185,6 +186,7 @@ const userList: User[] = [
     new User (10004, '陈', '磊' , '923@qq.com'),
     new User (10005, '菜', '磊' , '143@qq.com'),
 ];
+app.use('/', express.static(path.join(__dirname, '..', 'client', 'myapp')))
 
 app.get('/api', (req,res)=>{
     res.send('Hello, express!')
@@ -207,9 +209,9 @@ app.get('/api/usedcarlist' , (req,res)=>{
             p => p.seriesCode.indexOf(params.vehicleSeries) !== -1
         )
     }
-    // if(result.length > 0 && params.sortBy){
-    //     result = sortArr(result, params.sortBy, params.sortMode)
-    // }
+    if(result.length > 0 && params.sortBy){
+        result = sortArr(result, params.sortBy, params.sortMode)
+    }
     res.json(result);
 });
 
@@ -249,10 +251,10 @@ const subscriptions = new Map<any, string[]>()
 const wsServer = new Server({port:8085});
 wsServer.on(
     'connection', websocket =>{
-        websocket.send('这是服务器主动推送的');
+        //websocket.send('这是服务器主动推送的');
         websocket.on('message', message => {
            // 把字符串转成json
-           let msgObj = JSON.parse(message);
+           let msgObj = JSON.parse(message.toString());
            //通过key得到原来客户端得到关注的商品代码，如果为空则赋值一个空数组
            let productCodes = subscriptions.get(websocket) || [];
            //将客户端上传的商品代码加入到原先关注的商品代码中
@@ -286,16 +288,21 @@ setInterval(
         );
         subscriptions.forEach(
             (productCodes: string[] , ws) => {
-                //数组转换
-                let newBids = productCodes.map(
-                    productCode => ({
-                        producteCode: productCode,
-                        bid: currentBids.get(productCode)
-                    })
-                )
-                ws.send(
-                    JSON.stringify(newBids)
-                );
+                if (ws.readyState === 1) {
+                    //数组转换
+                    let newBids = productCodes.map(
+                        productCode => ({
+                            producteCode: productCode,
+                            bid: currentBids.get(productCode)
+                        })
+                    )
+                    ws.send(
+                        JSON.stringify(newBids)
+                    );
+                } else {
+                    subscriptions.delete(ws);
+                }
+
             }
         )
 

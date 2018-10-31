@@ -2,14 +2,15 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 var express = require("express");
 var ws_1 = require("ws");
+var path = require("path");
 var app = express();
 function sortArr(arr, sortBy, sortMode) {
     var len = arr.length;
     //排序方法为冒泡排序
-    for (var i = 1; i < len; ++i) {
-        for (var j = 1; j < len - i; ++j) {
+    for (var i = 0; i < len - 1; ++i) {
+        for (var j = 0; j < len - 1 - i; ++j) {
             //为true时，降序排序
-            if (sortMode == 'true') {
+            if (sortMode == 'false') {
                 //根据对象数组中对象的sortBy属性排序
                 if (arr[j][sortBy] > arr[j + 1][sortBy]) {
                     var temp = arr[j];
@@ -107,6 +108,7 @@ var userList = [
     new User(10004, '陈', '磊', '923@qq.com'),
     new User(10005, '菜', '磊', '143@qq.com'),
 ];
+app.use('/', express.static(path.join(__dirname, '..', 'client', 'myapp')));
 app.get('/api', function (req, res) {
     res.send('Hello, express!');
 });
@@ -122,9 +124,9 @@ app.get('/api/usedcarlist', function (req, res) {
     if (params.vehicleSeries !== null && params.vehicleSeries !== '-1' && params.vehicleSeries && result.length > 0) {
         result = usedCarList.filter(function (p) { return p.seriesCode.indexOf(params.vehicleSeries) !== -1; });
     }
-    // if(result.length > 0 && params.sortBy){
-    //     result = sortArr(result, params.sortBy, params.sortMode)
-    // }
+    if (result.length > 0 && params.sortBy) {
+        result = sortArr(result, params.sortBy, params.sortMode);
+    }
     res.json(result);
 });
 app.get('/api/usedcar/:productCode', function (req, res) {
@@ -148,10 +150,10 @@ var WatchProduct = (function () {
 var subscriptions = new Map();
 var wsServer = new ws_1.Server({ port: 8085 });
 wsServer.on('connection', function (websocket) {
-    websocket.send('这是服务器主动推送的');
+    //websocket.send('这是服务器主动推送的');
     websocket.on('message', function (message) {
         // 把字符串转成json
-        var msgObj = JSON.parse(message);
+        var msgObj = JSON.parse(message.toString());
         //通过key得到原来客户端得到关注的商品代码，如果为空则赋值一个空数组
         var productCodes = subscriptions.get(websocket) || [];
         //将客户端上传的商品代码加入到原先关注的商品代码中
@@ -177,11 +179,16 @@ setInterval(function () {
         currentBids.set(usedCar.productCode, newBid);
     });
     subscriptions.forEach(function (productCodes, ws) {
-        //数组转换
-        var newBids = productCodes.map(function (productCode) { return ({
-            producteCode: productCode,
-            bid: currentBids.get(productCode)
-        }); });
-        ws.send(JSON.stringify(newBids));
+        if (ws.readyState === 1) {
+            //数组转换
+            var newBids = productCodes.map(function (productCode) { return ({
+                producteCode: productCode,
+                bid: currentBids.get(productCode)
+            }); });
+            ws.send(JSON.stringify(newBids));
+        }
+        else {
+            subscriptions.delete(ws);
+        }
     });
 }, 2000);
